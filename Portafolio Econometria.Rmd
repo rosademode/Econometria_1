@@ -1,0 +1,201 @@
+---
+title: "E portafolio"
+author: "Grupo 9"
+date: "2023-07-01"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("nlme");install.packages("car");install.packages("sandwich");install.packages("psych")
+# Se realiza la carga de paquetes y librerias correspondientes.
+library(tidyverse);library(lmtest);library(stargazer);library(readxl)
+options(scipen=999);library(nlme); library(dplyr);library(sandwich);library(car);library(kableExtra);library(psych)
+```
+
+```{r}
+# Carga de base de datos más modificaciones
+df <- read_excel("data_port_econo - copia.xlsx")
+df <- df %>% select(densidadpoblacional,migracion,infantil,pibcapita,alfabetizacion,telefono,natalidad,mortalidad,costa) %>% na.omit() %>% mutate(migraxcosta=migracion*costa)
+colnames(df) <- c("den","mi","inf","pib","alf","tel","nat","mor","cos","mixcos")
+```
+**Estadistica descriptiva de las variables explicativas**
+```{r}
+descriptiva <- round(describe(df),2)
+descriptiva <- descriptiva %>% select(mean,sd,median,min,max)
+descriptiva %>% kable() %>%  kable_styling(full_width =F,position = "left",	font_size = 12)
+```
+**Modelo de regresión líneal simple**
+Modelo a estimar: *pibcapita = b0 + b1 x alfabetización + u*
+```{r}
+rgs <- lm(pib~alf,df)
+stargazer(rgs,type = "text")
+```
+Modelo estimado: *pibcapita.gorro = -12,434.340 + 267.440 x alfabetizacion*
+**Interpretación parametros**
+
+Constante *b0* gorro = -12,434.340 signo: signo es negativo, lo cual es contraintuitivo, dado que el pib per capita no debiese ser negativo en ningun caso. Cuando la alfabetizacion es 0, en promedio el pib per capita es -12,434.340 dólares, con todo lo demas constante.
+
+Alfabetización *b1* gorro= 267.440 signo: signo es positivo, lo que resulta intuitivo. Cuando la alfabetizacion aumenta en una unidad porcentual, el pib per capita aumenta en promedio 267.440 dólares, con todo lo demás constante.
+
+Se tiene un R² ajustado de 0.26 Aproximadamente un 26% de la variación de la variable PIB per capita es explicada, en promedio, por el incremento de un porciento de la tasa de alfabetización.
+
+**Supuestos**
+
+Supuesto 1: Línealidad en los parametros 
+Supuesto 2: Muestra aleatoria
+**Se asume que se cumple supuestos 1 y 2.**
+
+Supuesto 3: Variación muestral
+```{r}
+var <- var(df$alf)
+```
+Se cumple el supuesto 3, dado que la variable explicativa tiene variabilidad.
+
+Supuesto 4: Media condicional cero
+```{r}
+# Obtenemos los residuos
+residrsg <- residuals(rgs)
+# Observamos la correlacion entre la variable explicativa y sus residuos
+corrsg <- cor(df$alf,residrsg)
+corrsg
+```
+Se cumple este supuesto
+
+Al cumplirse los primeros 4 supuestos, el parametro de la variable alfabetizacion es *insesgado*.
+Supuesto 5: Homocedastecidad. Confianza de 95%.
+
+*H0: Varianza de los residuos es constante. (homocedastecidad)*
+*H1: No se cumple H0. (heterocedastecidad)*
+```{r}
+bptest(rgs)
+# Regla de rechazo
+# p < alpha
+p <- 0.00001772
+alpha <- 0.05
+p<alpha
+```
+Se rechaza h0 con un 95% de significancia, por lo que los errores no son homocedasticos.
+
+***Errores robustos*** Obtención de errores robustos utilizando corrección de Huber-White
+```{r}
+rgs_robustos <- coeftest(rgs, vcov = vcovHC(rgs, type = "HC1"))
+stargazer(rgs_robustos,type = "text")
+```
+
+**Modelo de regresión líneal multiple**
+
+**Modelo a estimar:**
+*pibcapita = b0 + b1 x alfabetizacion + b3 x densidad poblacional + b3 x migracion + b4 x infantil + b5 x telefono + b6 x natalidad + b7 x mortalidad + b8 x costa + b9 x migraxcost + u*
+```{r}
+rgm <-  lm(pib~alf+den+mi+inf+tel+nat+mor+cos+mixcos,df)
+stargazer(rgm,type = "text")
+```
+
+**Modelo estimado:**
+*pibcapita = 4,478.767 - 12.732 b1 x alfabetizacion - 0.259 x densidad poblacional + 577.523 x migracion -72.027 x infantil + 32.194 x telefono + 22.078 x natalidad + 199.259 x mortalidad - 708.141 x costa - 151.742 x migraxcost*
+R cuadrado ajustado: 0.763
+
+## Supuestos
+
+Supuesto 1: Línealidad en los parametros
+supuesto 2: Muestra aleatoria
+**Se asume que se cumple supuestos 1 y 2.**
+
+Supuesto 3: Multicolinealidad
+```{r}
+matrizcorr <- round(data.frame(cor(df[,-4])),2)
+matrizcorr%>% kable() %>%  kable_styling(full_width =F,position = "left",	font_size = 12)
+```
+Se cumple el supuesto, dado que no existe colinealidad perfecta entre ninguna de las variables explicativas.
+
+Supuesto 4:
+```{r}
+residrgm <- residuals(rgm)
+# Observamos la correlacion entre las variables explicativas y sus residuos.
+correlacion <- cor(df[,c(1,2,3,5,6,7,8,9)],residrgm)
+correlacion
+```
+Se cumple este supuesto. Al cumplirse los supuestos del 1 al 4, nos encontramos ante parametros insesgados.
+
+Supuesto 5: homocedastecidad.
+Test de brauch-pagan. Confianza de 95%.
+
+***H0: varianza de los residuos es constante. (Homocedastecidad)***
+***H1: no se cumple H0. (Heterocedastecidad)***
+```{r}
+bptest(rgm)
+# Regla de rechazo
+# p< alpha
+
+pm <- 0.00002335
+pm<alpha
+```
+Se rechaza h0 con un 5% de significancia, dado que el valor p es menor a la significancia. Por ende, el modelo presenta heterocedastecidad.
+
+## Corrección de heterocedasticidad.
+
+***Errores robustos***
+Obtención de errores robustos utilizando corrección de Huber-White
+```{r}
+#Se utiliza la libreria coeftest para generar errores robustos a la heterocedasticidad
+rgm_robustos <- coeftest(rgm, vcov = vcovHC(rgm, type = "HC1"))
+stargazer(rgs,rgm,rgm_robustos,type="text")
+```
+
+## Test conjunto con nuevo modelo.
+Debido a que se tienen variables no significativas en el modelo de regresión lineal anteriormente planteado, se crea un nuevo modelo en el cual solo se incluyan las variables significativas para realizar un test conjunto.
+
+*pibcapita = b0 + b1 x infantil + b2 x telefono + b3 x mortalidad +u*
+```{r}
+rgm2 <-lm(pib~inf+tel+mor,df)
+stargazer(rgm2,type = "text")
+```
+
+***Modelo no restringido:** pibcapita = b0 gorro+ b1 gorro x alfabetizacion + b2 gorro x densidad poblacional + b3 gorro x migracion + b4 gorro x infantil + b5 gorro x telefono + b6 gorro x natalidad + b7 gorro x mortalidad + b8 gorro x costa + b9 gorro x migraxcost*
+
+***Modelo restringido:** pibcapita = b0 gorro+ b1 gorro x infantil + b2 gorro x telefono + b3 gorro x mortalidad*
+
+*Ho: b1 alfabetizacion = 0, b2 densidad poblacional = 0 , b3 migracion = 0, b6 natalidad = 0, b8 costa = 0, b9 migraxcost = 0*
+*H1: b1 alfabetizacion =*! 0, *b2 densidad poblacional =! 0 , b3 migracion =! 0, b6 natalidad =! 0, b8 costa =! 0, b9 migraxcost =! 0*
+
+Se restringen 6 parametros
+```{r}
+#Calculo F
+fc <- (0.774-0.7263)/(1-0.774)*(193/6)
+fc
+#alfa 5%
+ft <- qf(1-0.05,5,193)
+ft
+fc>ft
+```
+Se rechaza h0, con un 95% de confianza, por lo que las variables excluidas en conjunto son significativas.
+**Test conjunto con modelo de regresión simple**
+***Modelo no restringido:** pibcapita = b0 gorro+ b1 gorro x alfabetizacion + b2 gorro x densidad poblacional + b3 gorro x migracion + b4 gorro x infantil + b5 gorro x telefono + b6 gorro x natalidad + b7 gorro x mortalidad + b8 gorro x costa + b9 gorro x migraxcost*
+
+***Modelo restringido:** pibcapita = b0 gorro+ b1 gorro x alfabetizacion*
+*Ho: b2 densidad poblacional = 0 , b3 migracion = 0, b4 infantil = 0, b5 telefono = 0, b6 natalidad = 0, b7 mortalidad = 0, b8 costa = 0, b9 migraxcost = 0*
+*H1*: *b2 densidad poblacional =! 0 , b3 migracion =! 0, b4 infantil =! 0, b5 telefono =! 0, b6 natalidad =! 0, b7 mortalidad =! 0, b8 costa =! 0, b9 migraxcost =! 0*
+```{r}
+#Calculo F
+fc2 <- (0.774-0.267)/(1-0.774)*(193/8)
+#alfa 5%
+ft2 <- qf(1-0.05,8,193)
+fc2>ft2
+```
+Se rechaza H0, con un 95% de confianza, por ende las variables son significativas conjuntamente para explicar la variable dependiente.
+
+**Test de significancia global**
+
+*Ho: b1 alfabetizacion = 0, b2 densidad poblacional = 0 , b3 migracion = 0, b4 infantil = 0, b5 telefono = 0, b6 natalidad = 0, b7 mortalidad = 0, b8 costa = 0, b9 migraxcost = 0*
+*H1*: *b1 alfabetizacion =! 0, b2 densidad poblacional =! 0 , b3 migracion =! 0, b4 infantil =! 0, b5 telefono =! 0, b6 natalidad =! 0, b7 mortalidad =! 0, b8 costa =! 0, b9 migraxcost =! 0*
+
+Según el modelo analizado, se observa un F statistic de 73.291. Sin embargo, se realiza el calculo de manera manual.
+```{r}
+#Calculo del F
+fc3 <- 0.774/(1-0.774)*(193/9)
+
+# alfa 5%
+ft3 <- qf(1-0.05,9,193)
+fc3>ft3
+```
+Se rechaza H0 con un 95% de confianza, por ende, las variables explicativas en su conjunto son significativas.
